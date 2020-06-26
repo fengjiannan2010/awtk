@@ -34,6 +34,8 @@
 #include "base/window_manager.h"
 #include "widgets/edit_ipv4.h"
 #include "widgets/edit_date.h"
+#include "widgets/edit_time.h"
+#include "widgets/edit_time_full.h"
 
 #define ACTION_TEXT_NEXT "next"
 #define ACTION_TEXT_DONE "done"
@@ -812,6 +814,10 @@ ret_t edit_set_input_type(widget_t* widget, input_type_t type) {
   edit->input_type = type;
   edit->pre_input = NULL;
   edit->is_valid_char = NULL;
+  edit->fix_value = NULL;
+  edit->inc_value = NULL;
+  edit->dec_value = NULL;
+  edit->is_valid_value = NULL;
 
   if (type == INPUT_INT || type == INPUT_UINT) {
     edit->step = 1;
@@ -833,6 +839,20 @@ ret_t edit_set_input_type(widget_t* widget, input_type_t type) {
     edit->pre_input = edit_date_pre_input;
     edit->is_valid_value = edit_date_is_valid;
     edit->is_valid_char = edit_date_is_valid_char;
+  } else if (type == INPUT_TIME) {
+    edit->fix_value = edit_time_fix;
+    edit->inc_value = edit_time_inc_value;
+    edit->dec_value = edit_time_dec_value;
+    edit->pre_input = edit_time_pre_input;
+    edit->is_valid_value = edit_time_is_valid;
+    edit->is_valid_char = edit_time_is_valid_char;
+  } else if (type == INPUT_TIME_FULL) {
+    edit->fix_value = edit_time_full_fix;
+    edit->inc_value = edit_time_full_inc_value;
+    edit->dec_value = edit_time_full_dec_value;
+    edit->pre_input = edit_time_full_pre_input;
+    edit->is_valid_value = edit_time_full_is_valid;
+    edit->is_valid_char = edit_time_full_is_valid_char;
   }
 
   return RET_OK;
@@ -1606,6 +1626,11 @@ ret_t edit_add_value_with_sep(widget_t* widget, int delta, char sep) {
   wstr_t* text = &(widget->text);
   text_edit_get_state(edit->model, &state);
 
+  if (text->size == 0) {
+    edit->fix_value(widget);
+    return RET_OK;
+  }
+
   cursor = state.cursor < text->size ? state.cursor : text->size - 1;
   if (text->str[cursor] == sep && cursor > 0) {
     cursor--;
@@ -1666,4 +1691,3 @@ bool_t edit_is_valid_value(widget_t* widget) {
     return edit_is_valid_value_default(widget);
   }
 }
-

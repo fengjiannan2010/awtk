@@ -151,10 +151,11 @@ static bool_t edit_pattern_is_valid_char(widget_t* widget, wchar_t c, wchar_t se
           return FALSE;
         } else if (text->str[cursor] == sep) {
           /*输入到下一个part*/
-          text_edit_set_cursor(edit->model, cursor + 1);
-        } else {
-          /*覆盖下一个字符*/
-          text_edit_set_select(edit->model, cursor + 1, cursor + 2);
+          if (text->str[cursor] == sep) {
+            text_edit_set_cursor(edit->model, cursor + 1);
+          } else {
+            text_edit_set_select(edit->model, cursor + 1, cursor + 2);
+          }
         }
       } else {
         /*正常输入*/
