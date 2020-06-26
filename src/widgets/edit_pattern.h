@@ -50,7 +50,7 @@ static bool_t edit_pattern_is_valid(widget_t* widget, wchar_t sep, uint32_t sep_
   return TRUE;
 }
 
-static ret_t edit_pattern_fix_ex(widget_t* widget, bool_t strict, wchar_t sep, uint32_t sep_nr,
+static ret_t edit_pattern_fix_ex(widget_t* widget, bool_t strict, const char* defval, wchar_t sep, uint32_t sep_nr,
                                  pattern_part_get_max_len_t get_part_max_len, pattern_part_fix_t fix) {
   uint32_t i = 0;
   wchar_t str[32];
@@ -61,8 +61,8 @@ static ret_t edit_pattern_fix_ex(widget_t* widget, bool_t strict, wchar_t sep, u
   wstr_t* text = &(widget->text);
 
   memset(str, 0x00, sizeof(str));
-  if (tk_wstr_count_c(text->str, sep) != 3) {
-    widget_set_text_utf8(widget, "0.0.0.0");
+  if (tk_wstr_count_c(text->str, sep) != sep_nr ) {
+    widget_set_text_utf8(widget, defval);
     edit_set_cursor(widget, 0);
 
     return RET_OK;
@@ -86,7 +86,7 @@ static ret_t edit_pattern_fix_ex(widget_t* widget, bool_t strict, wchar_t sep, u
       *p = 0;
       break;
     } else {
-      *p++ = '.';
+      *p++ = sep;
     }
 
     i++;

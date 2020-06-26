@@ -33,6 +33,7 @@
 #include "base/clip_board.h"
 #include "base/window_manager.h"
 #include "widgets/edit_ipv4.h"
+#include "widgets/edit_date.h"
 
 #define ACTION_TEXT_NEXT "next"
 #define ACTION_TEXT_DONE "done"
@@ -825,6 +826,13 @@ ret_t edit_set_input_type(widget_t* widget, input_type_t type) {
     edit->pre_input = edit_ipv4_pre_input;
     edit->is_valid_value = edit_ipv4_is_valid;
     edit->is_valid_char = edit_ipv4_is_valid_char;
+  } else if (type == INPUT_DATE) {
+    edit->fix_value = edit_date_fix;
+    edit->inc_value = edit_date_inc_value;
+    edit->dec_value = edit_date_dec_value;
+    edit->pre_input = edit_date_pre_input;
+    edit->is_valid_value = edit_date_is_valid;
+    edit->is_valid_char = edit_date_is_valid_char;
   }
 
   return RET_OK;

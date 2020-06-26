@@ -4,6 +4,7 @@
 #define EDIT_IPV4_SEP_NR 3
 #define EDIT_IPV4_MIN_PART_SIZE 1
 #define EDIT_IPV4_MAX_PART_SIZE 3
+#define EDIT_IPV4_DEFVAL "0.0.0.0"
 
 static uint32_t edit_ipv4_part_get_max_len(uint32_t index) {
   return EDIT_IPV4_MAX_PART_SIZE;
@@ -40,16 +41,16 @@ static ret_t edit_ipv4_dec_value(widget_t* widget) {
 }
 
 static ret_t edit_ipv4_pre_input(widget_t* widget, uint32_t key) {
-  return edit_pre_input_with_sep(widget, key, '.');
+  return edit_pre_input_with_sep(widget, key, EDIT_IPV4_SEP);
 }
 
 static ret_t edit_ipv4_fix_ex(widget_t* widget, bool_t strict) {
-  return edit_pattern_fix_ex(widget, strict, EDIT_IPV4_SEP, EDIT_IPV4_SEP_NR,
+  return edit_pattern_fix_ex(widget, strict, EDIT_IPV4_DEFVAL, EDIT_IPV4_SEP, EDIT_IPV4_SEP_NR,
                              edit_ipv4_part_get_max_len, edit_ipv4_fix_part);
 }
 
 static bool_t edit_ipv4_is_valid_char(widget_t* widget, wchar_t c) {
-  edit_pattern_fix_ex(widget, FALSE, EDIT_IPV4_SEP, EDIT_IPV4_SEP_NR, edit_ipv4_part_get_max_len,
+  edit_pattern_fix_ex(widget, FALSE, EDIT_IPV4_DEFVAL, EDIT_IPV4_SEP, EDIT_IPV4_SEP_NR, edit_ipv4_part_get_max_len,
                       edit_ipv4_fix_part);
 
   return edit_pattern_is_valid_char(widget, c, EDIT_IPV4_SEP, edit_ipv4_part_get_max_len);
