@@ -32,11 +32,14 @@
 #include "base/events.h"
 #include "base/clip_board.h"
 #include "base/window_manager.h"
+#include "widgets/edit_ipv4.h"
 
 #define ACTION_TEXT_NEXT "next"
 #define ACTION_TEXT_DONE "done"
 
 #define PASSWORD_MASK_CHAR '*'
+
+static ret_t edit_auto_fix(widget_t* widget);
 static ret_t edit_update_status(widget_t* widget);
 static ret_t edit_select_all_async(const idle_info_t* info);
 
@@ -243,7 +246,7 @@ static bool_t edit_is_number(widget_t* widget) {
          input_type == INPUT_UFLOAT || input_type == INPUT_HEX;
 }
 
-bool_t edit_is_valid_value(widget_t* widget) {
+static bool_t edit_is_valid_value_default(widget_t* widget) {
   wstr_t* text = NULL;
   edit_t* edit = EDIT(widget);
   return_value_if_fail(widget != NULL && edit != NULL, FALSE);
@@ -311,7 +314,7 @@ bool_t edit_is_valid_value(widget_t* widget) {
   return TRUE;
 }
 
-static ret_t edit_auto_fix(widget_t* widget) {
+static ret_t edit_auto_fix_default(widget_t* widget) {
   wstr_t* text = NULL;
   edit_t* edit = EDIT(widget);
   return_value_if_fail(widget != NULL && edit != NULL, RET_BAD_PARAMS);
@@ -469,9 +472,23 @@ static ret_t edit_paste(widget_t* widget) {
   return RET_OK;
 }
 
+static ret_t edit_pre_input(widget_t* widget, uint32_t key) {
+  edit_t* edit = EDIT(widget);
+
+  if (edit->pre_input != NULL) {
+    return edit->pre_input(widget, key);
+  }
+
+  return RET_OK;
+}
+
 static ret_t edit_on_key_down(widget_t* widget, key_event_t* e) {
   uint32_t key = e->key;
   edit_t* edit = EDIT(widget);
+
+  if (edit_pre_input(widget, key) == RET_STOP) {
+    return RET_STOP;
+  }
 
   if (key == TK_KEY_TAB) {
     return RET_OK;
@@ -486,19 +503,17 @@ static ret_t edit_on_key_down(widget_t* widget, key_event_t* e) {
     }
 
   } else if (key == TK_KEY_DOWN) {
-    if (!edit_is_number(widget)) {
-      widget_focus_next(widget);
-      return RET_STOP;
-    } else {
+    if (edit_is_number(widget) || edit->inc_value != NULL) {
       edit_dec(edit);
+    } else {
+      widget_focus_next(widget);
     }
     return RET_STOP;
   } else if (key == TK_KEY_UP) {
-    if (!edit_is_number(widget)) {
-      widget_focus_prev(widget);
-      return RET_STOP;
-    } else {
+    if (edit_is_number(widget) || edit->inc_value != NULL) {
       edit_inc(edit);
+    } else {
+      widget_focus_prev(widget);
     }
     return RET_STOP;
   }
@@ -794,10 +809,22 @@ ret_t edit_set_input_type(widget_t* widget, input_type_t type) {
   return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
 
   edit->input_type = type;
+  edit->pre_input = NULL;
+  edit->is_valid_char = NULL;
+
   if (type == INPUT_INT || type == INPUT_UINT) {
     edit->step = 1;
   } else if (type == INPUT_FLOAT || type == INPUT_UFLOAT) {
     edit->step = 1.0f;
+  } else if (type == INPUT_PASSWORD) {
+    edit_set_password_visible(widget, edit->password_visible);
+  } else if (type == INPUT_IPV4) {
+    edit->fix_value = edit_ipv4_fix;
+    edit->inc_value = edit_ipv4_inc_value;
+    edit->dec_value = edit_ipv4_dec_value;
+    edit->pre_input = edit_ipv4_pre_input;
+    edit->is_valid_value = edit_ipv4_is_valid;
+    edit->is_valid_char = edit_ipv4_is_valid_char;
   }
 
   return RET_OK;
@@ -960,7 +987,9 @@ ret_t edit_get_prop(widget_t* widget, const char* name, value_t* v) {
         value_set_double(v, d);
         break;
       }
-      default: { value_set_wstr(v, widget->text.str); }
+      default: {
+        value_set_wstr(v, widget->text.str);
+      }
     }
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_CARET_X)) {
@@ -1044,10 +1073,7 @@ ret_t edit_set_prop(widget_t* widget, const char* name, const value_t* v) {
     } else {
       input_type = (input_type_t)value_int(v);
     }
-    edit->input_type = input_type;
-    if (input_type == INPUT_PASSWORD) {
-      edit_set_password_visible(widget, edit->password_visible);
-    }
+    edit_set_input_type(widget, input_type);
     return RET_OK;
   } else if (tk_str_eq(name, WIDGET_PROP_READONLY)) {
     edit->readonly = value_bool(v);
@@ -1229,7 +1255,7 @@ ret_t edit_set_double(widget_t* widget, double value) {
   return RET_OK;
 }
 
-ret_t edit_inc(edit_t* edit) {
+static ret_t edit_inc_default(edit_t* edit) {
   wstr_t* text = NULL;
   widget_t* widget = WIDGET(edit);
   input_type_t input_type = (input_type_t)0;
@@ -1266,7 +1292,7 @@ ret_t edit_inc(edit_t* edit) {
   return widget_invalidate_force(widget, NULL);
 }
 
-ret_t edit_dec(edit_t* edit) {
+static ret_t edit_dec_default(edit_t* edit) {
   wstr_t* text = NULL;
   widget_t* widget = WIDGET(edit);
   input_type_t input_type = (input_type_t)0;
@@ -1497,3 +1523,139 @@ ret_t edit_set_is_valid_char(widget_t* widget, edit_is_valid_char_t is_valid_cha
 
   return RET_OK;
 }
+
+ret_t edit_set_is_valid_value(widget_t* widget, edit_is_valid_value_t is_valid_value) {
+  edit_t* edit = EDIT(widget);
+  return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
+
+  edit->is_valid_value = is_valid_value;
+
+  return RET_OK;
+}
+
+ret_t edit_set_fix_value(widget_t* widget, edit_fix_value_t fix_value) {
+  edit_t* edit = EDIT(widget);
+  return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
+
+  edit->fix_value = fix_value;
+
+  return RET_OK;
+}
+
+ret_t edit_set_inc_value(widget_t* widget, edit_inc_value_t inc_value) {
+  edit_t* edit = EDIT(widget);
+  return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
+
+  edit->inc_value = inc_value;
+
+  return RET_OK;
+}
+
+ret_t edit_set_dec_value(widget_t* widget, edit_dec_value_t dec_value) {
+  edit_t* edit = EDIT(widget);
+  return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
+
+  edit->dec_value = dec_value;
+
+  return RET_OK;
+}
+
+ret_t edit_set_pre_input(widget_t* widget, edit_pre_input_t pre_input) {
+  edit_t* edit = EDIT(widget);
+  return_value_if_fail(edit != NULL, RET_BAD_PARAMS);
+
+  edit->pre_input = pre_input;
+
+  return RET_OK;
+}
+
+ret_t edit_pre_input_with_sep(widget_t* widget, uint32_t key, char sep) {
+  edit_t* edit = EDIT(widget);
+  text_edit_state_t state;
+  text_edit_unselect(edit->model);
+  text_edit_get_state(edit->model, &state);
+
+  if (key == TK_KEY_BACKSPACE && state.cursor > 0) {
+    if (widget->text.str[state.cursor - 1] == sep) {
+      text_edit_set_cursor(edit->model, state.cursor - 1);
+      return RET_STOP;
+    }
+  } else if (key == TK_KEY_DELETE) {
+    if (widget->text.str[state.cursor] == sep) {
+      text_edit_set_cursor(edit->model, state.cursor + 1);
+      return RET_STOP;
+    }
+  }
+
+  return RET_OK;
+}
+
+ret_t edit_add_value_with_sep(widget_t* widget, int delta, char sep) {
+  char c = 0;
+  uint32_t cursor = 0;
+  text_edit_state_t state;
+  edit_t* edit = EDIT(widget);
+  wstr_t* text = &(widget->text);
+  text_edit_get_state(edit->model, &state);
+
+  cursor = state.cursor < text->size ? state.cursor : text->size - 1;
+  if (text->str[cursor] == sep && cursor > 0) {
+    cursor--;
+  }
+
+  c = text->str[cursor];
+  if (c >= '0' && c <= '9') {
+    c += delta;
+
+    if (c < '0') {
+      c = '9';
+    }
+
+    if (c > '9') {
+      c = '0';
+    }
+
+    text->str[cursor] = c;
+  }
+
+  text_edit_set_select(edit->model, cursor, cursor + 1);
+  edit_dispatch_event(widget, EVT_VALUE_CHANGING);
+
+  return widget_invalidate_force(widget, NULL);
+}
+
+ret_t edit_inc(edit_t* edit) {
+  if (edit->inc_value != NULL) {
+    return edit->inc_value(WIDGET(edit));
+  } else {
+    return edit_inc_default(edit);
+  }
+}
+
+ret_t edit_dec(edit_t* edit) {
+  if (edit->dec_value != NULL) {
+    return edit->dec_value(WIDGET(edit));
+  } else {
+    return edit_dec_default(edit);
+  }
+}
+
+static ret_t edit_auto_fix(widget_t* widget) {
+  edit_t* edit = EDIT(widget);
+
+  if (edit->fix_value != NULL) {
+    return edit->fix_value(widget);
+  } else {
+    return edit_auto_fix_default(widget);
+  }
+}
+
+bool_t edit_is_valid_value(widget_t* widget) {
+  edit_t* edit = EDIT(widget);
+  if (edit->is_valid_value != NULL) {
+    return edit->is_valid_value(widget);
+  } else {
+    return edit_is_valid_value_default(widget);
+  }
+}
+
